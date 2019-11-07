@@ -1,9 +1,9 @@
 open Batteries
 
 module type BUFFER = sig 
-  type samplebuffer = private float array 
-  type latency 
-  type period 
+  type samplebuffer =  float array 
+  type latency = float
+  type period = float
   type buffer = private latency * period * samplebuffer
 
   val latency : buffer -> latency
@@ -43,13 +43,21 @@ module type STREAM = sig
   type stream = private defdomain * streamfunction
 
   val make : defdomain -> (timestamp * Buffer.buffer) list -> stream
+  val make_samplestream : defdomain -> float list -> stream
+  val make_singleton : timestamp -> Buffer.buffer -> stream
+  val emptystream : stream
+  val is_empty : stream -> bool
+
   val dom : stream -> defdomain 
   val streamfunc : stream -> streamfunction
   val first : stream -> timestamp
   val tail : stream -> defdomain
   val last : stream -> timestamp
   val next : stream -> timestamp -> timestamp
+  val length : stream -> int
   val prec : stream -> timestamp -> defdomain
+  val concat : stream -> stream -> stream
+  val at : stream -> int -> timestamp
 end
 
 module Stream : STREAM = struct 
@@ -65,10 +73,24 @@ module Stream : STREAM = struct
   let make defdomain values_assoc  = 
     (defdomain , (function t -> List.assoc t values_assoc) )  
 
+  (** Make a stream of samples *)
+  let make_samplestream defdomain  samples =
+    let samplebuffers  = List.map (fun sample -> Buffer.make 0. 1. (Array.singleton sample)) samples in 
+    (* Combine will raise if the two argument lists have different sizes *)
+    make defdomain (List.combine defdomain samplebuffers )
+
+  let make_singleton (timestamp : timestamp) (buffer : Buffer.buffer) =
+    ([timestamp], function (t : timestamp)-> buffer)
+
   (** dom(s) of a stream s *)
   let dom s = fst s
   (** To get the actual stream function of a stream s *)
   let streamfunc s = snd s
+  
+  let emptystream = ([], function t -> undefined "Empty stream")
+  let is_empty s = List.is_empty (dom s)
+
+
 
   (* handling timestamps *)
   let first s = List.hd (dom s)
@@ -81,8 +103,21 @@ module Stream : STREAM = struct
       | [] -> failwith "No next timestamp"
     in 
     aux (dom s)
+  let length s = List.length (dom s)
   let prec s t = 
     List.take_while (fun t' -> t' <= t) (dom s)
   let succ s t =
     List.drop_while (fun t' -> t' < t) (dom s)
+  let concat s s' =
+    if is_empty s then s' 
+    else if is_empty s' then s 
+    else 
+      begin
+        assert (last s < first s');
+        ((dom s) @ (dom s'), function t -> (streamfunc (if List.mem t (dom s) then s else s')) t)
+      end
+   
+  (* Seeing a stream as a sequence with indices *)
+  let at s  = List.at (dom s) 
+
 end
