@@ -43,6 +43,7 @@ module type STREAM = sig
   type stream = private defdomain * streamfunction
 
   val make : defdomain -> (timestamp * Buffer.buffer) list -> stream
+  val make_f : defdomain -> streamfunction -> stream
   val make_samplestream : defdomain -> float list -> stream
   val make_singleton : timestamp -> Buffer.buffer -> stream
   val emptystream : stream
@@ -58,6 +59,7 @@ module type STREAM = sig
   val prec : stream -> timestamp -> defdomain
   val concat : stream -> stream -> stream
   val at : stream -> int -> timestamp
+  val substream : stream -> timestamp -> timestamp -> stream
 end
 
 module Stream : STREAM = struct 
@@ -72,6 +74,9 @@ module Stream : STREAM = struct
    *)
   let make defdomain values_assoc  = 
     (defdomain , (function t -> List.assoc t values_assoc) )  
+  
+  (** Create from a domain and a function. *) 
+  let make_f defdomain f = (defdomain, f)
 
   (** Make a stream of samples *)
   let make_samplestream defdomain  samples =
@@ -84,8 +89,11 @@ module Stream : STREAM = struct
 
   (** dom(s) of a stream s *)
   let dom s = fst s
-  (** To get the actual stream function of a stream s *)
-  let streamfunc s = snd s
+  (** To get the actual stream function of a stream s. We encapsulate it 
+    into a check that the given value is in the definition domain.
+    However, it can be wrapped several times so maybe we should displace it into the make functions themselves. *)
+  let streamfunc s = 
+    function t -> assert (List.mem t (dom s)); (snd s) t
   
   let emptystream = ([], function t -> undefined "Empty stream")
   let is_empty s = List.is_empty (dom s)
@@ -119,5 +127,9 @@ module Stream : STREAM = struct
    
   (* Seeing a stream as a sequence with indices *)
   let at s  = List.at (dom s) 
+
+  let substream s t1 t2 =
+    let new_defdomain = List.take_while (fun t' -> t' <= t2) (List.drop_while (fun t' -> t' >= t1) (dom s)) in 
+    make_f new_defdomain (streamfunc s) 
 
 end
