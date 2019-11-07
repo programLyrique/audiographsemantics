@@ -1,1 +1,3 @@
-true: package(batteries)
+true: package(batteries), package(oUnit)
+"tests": include
+true: debug

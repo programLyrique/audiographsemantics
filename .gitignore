@@ -1,3 +1,5 @@
 _build
 semantics.native
 semantics.byte
+tests.native
+tests.byte

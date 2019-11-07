@@ -1,2 +1,4 @@
 PKG batteries
+PKG ounit
 B _build/**
+S tests/**

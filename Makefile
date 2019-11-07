@@ -15,7 +15,9 @@ native:
 byte:
 	$(OCB) semantics.byte
 
+test:
+	$(OCB) tests.native
+	./tests.native
 
 
-
-.PHONY: all clean byte native run 
+.PHONY: all clean byte native run test

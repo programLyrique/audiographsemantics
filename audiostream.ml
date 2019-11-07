@@ -125,8 +125,8 @@ module Stream : STREAM = struct
         ((dom s) @ (dom s'), function t -> (streamfunc (if List.mem t (dom s) then s else s')) t)
       end
    
-  (* Seeing a stream as a sequence with indices *)
-  let at s  = List.at (dom s) 
+  (* Seeing a stream as a sequence with indices. Yes, we could remove i on both sides but it is more readable like that *)
+  let at s  i = List.at (dom s) i
 
   let substream s t1 t2 =
     let new_defdomain = List.take_while (fun t' -> t' <= t2) (List.drop_while (fun t' -> t' >= t1) (dom s)) in 
