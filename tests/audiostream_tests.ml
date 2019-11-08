@@ -11,4 +11,8 @@ let singleton_stream test_ctxt =
   assert_equal 1. (Buffer.period buf);
   assert_equal samplebuf (Buffer.samplebuffer buf)
 
+let sample_periodic_s  = Stream.make_sample_periodic 10 1. 12 0.5
+
+
+
 let suite = "audiostream" >::: ["singleton_stream" >:: singleton_stream]

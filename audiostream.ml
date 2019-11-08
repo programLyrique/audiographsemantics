@@ -1,4 +1,5 @@
 open Batteries
+open Utils
 
 module type BUFFER = sig 
   type samplebuffer =  float array 
@@ -46,6 +47,7 @@ module type STREAM = sig
   val make_f : defdomain -> streamfunction -> stream
   val make_samplestream : defdomain -> float list -> stream
   val make_singleton : timestamp -> Buffer.buffer -> stream
+  val make_sample_periodic : int -> Buffer.period -> int -> float -> stream
   val emptystream : stream
   val is_empty : stream -> bool
 
@@ -87,6 +89,32 @@ module Stream : STREAM = struct
   let make_singleton (timestamp : timestamp) (buffer : Buffer.buffer) =
     ([timestamp], function (t : timestamp)-> buffer)
 
+  (** Build a sample-periodic stream from a constant sample value, starting from timestamp 0. *)
+  let make_sample_periodic nb_buffers sample_period buffersize sample =
+    let buffer_duration = sample_period *. (float_of_int buffersize) in 
+    let defdomain = List.init nb_buffers (fun i -> (float_of_int i) *. buffer_duration) in 
+    (defdomain,  function t -> Buffer.make 0. sample_period (Array.make buffersize sample))
+
+  (** Build a sample-periodic stream from a list of values, starting from timestamp 0. If the size of the list of values is not a multiple of 
+  the buffersize, pad with zeroes at the end *)
+  let make_sample_periodic_samples sample_period buffersize samples = 
+    let buffer_duration = sample_period *. (float_of_int buffersize) in
+    let nb_samples = List.length samples in  
+    let nb_buffers = nb_samples / buffersize + if nb_samples mod buffersize <> 0 then 1 else 0 in 
+    let defdomain = List.init nb_buffers (fun i -> (float_of_int i) *. buffer_duration) in 
+    let buffers = Array.make nb_buffers [] in 
+    let rec aux i = function 
+      | []  -> ()
+      | l -> 
+      begin
+        let prefix = List.take buffersize l in 
+        buffers.(i) <- extend prefix buffersize 0.;
+        aux (i+1) (List.drop buffersize l )
+      end
+    in
+
+    (defdomain, function t -> buffers.(int_of_float (t /. (float_of_int buffersize))))
+
   (** dom(s) of a stream s *)
   let dom s = fst s
   (** To get the actual stream function of a stream s. We encapsulate it 
@@ -125,11 +153,13 @@ module Stream : STREAM = struct
         ((dom s) @ (dom s'), function t -> (streamfunc (if List.mem t (dom s) then s else s')) t)
       end
    
-  (* Seeing a stream as a sequence with indices. Yes, we could remove i on both sides but it is more readable like that *)
-  let at s  i = List.at (dom s) i
+  (* Seeing a stream as a sequence with indices starting at 1. Yes, we could remove i on both sides but it is more readable like that *)
+  let at s  i = List.at (dom s) (i - 1)
 
   let substream s t1 t2 =
     let new_defdomain = List.take_while (fun t' -> t' <= t2) (List.drop_while (fun t' -> t' >= t1) (dom s)) in 
     make_f new_defdomain (streamfunc s) 
+
+  let phi s = ()
 
 end
