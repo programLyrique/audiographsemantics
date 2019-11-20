@@ -13,6 +13,7 @@ module type BUFFER = sig
   val length : buffer -> int 
   val (@+) : buffer -> latency -> buffer 
   val make : latency -> period -> samplebuffer -> buffer 
+  val make_singleton : latency -> period -> float -> buffer
 end 
 
 (** Buffers *)
@@ -31,13 +32,14 @@ module Buffer : BUFFER = struct
   let (@+) ((lat, p, spbuf) : buffer) latency = (lat +. latency, p, spbuf)
 
   let make latency p spbuf  = (latency, p, spbuf) 
+  let make_singleton latency p sample = (latency, p, Array.singleton sample)
 end 
 
 (** Streams
 We could write a functor to parametrize with different buffer definitions.
  *)
 
-module type STREAM = sig 
+module type AUDIOSTREAM = sig 
   type timestamp = float
   type defdomain 
   type streamfunction = timestamp -> Buffer.buffer 
@@ -62,9 +64,12 @@ module type STREAM = sig
   val concat : stream -> stream -> stream
   val at : stream -> int -> timestamp
   val substream : stream -> timestamp -> timestamp -> stream
+
+  val unbufferize : timestamp -> Buffer.buffer -> stream
+  val phi : stream -> stream
 end
 
-module Stream : STREAM = struct 
+module AudioStream : AUDIOSTREAM = struct 
   type timestamp = float
   (* Finite stream for now. We could use an Enum (infinite stream) in the Batteries lib to represent infinite streams *)
   type defdomain = timestamp list (* Could be an ordered set for better performance of search *)
@@ -77,7 +82,7 @@ module Stream : STREAM = struct
   let make defdomain values_assoc  = 
     (defdomain , (function t -> List.assoc t values_assoc) )  
   
-  (** Create from a domain and a function. *) 
+  (** Create from a definition domain and a function. *) 
   let make_f defdomain f = (defdomain, f)
 
   (** Make a stream of samples *)
@@ -160,6 +165,37 @@ module Stream : STREAM = struct
     let new_defdomain = List.take_while (fun t' -> t' <= t2) (List.drop_while (fun t' -> t' >= t1) (dom s)) in 
     make_f new_defdomain (streamfunc s) 
 
-  let phi s = ()
+  (** Generates a stream from a timestampd and a buffer, where each sample in the buffer becomes an element in the stream *) 
+  let unbufferize t b = 
+    let latency = Buffer.latency b in 
+    let period = Buffer.period b in 
+    let defdomain = Array.init (Buffer.length b) (fun i -> t +. period *. (float_of_int i) ) in 
+    let elements = Array.mapi (fun i sample -> (defdomain.(i), Buffer.make latency period 
+          (Array.singleton sample))) (Buffer.samplebuffer b)  in 
+    make (Array.to_list defdomain) (Array.to_list elements)
+
+  (** Look for a sample at timestamp t' in a buffer at timestamp t*) 
+  let sample_at t b t' =
+    let period = Buffer.period b in 
+    let t_last = t +. (float_of_int (Buffer.length b) -. 1.)  *. period in 
+    assert (t <= t' && t' <= t_last);
+    let index = int_of_float ((t' -. t) /. period) in 
+    (Buffer.samplebuffer b).(index)
+
+  (* Phi transforms a stream of buffers into a stream of samples *)
+  let phi (s : stream) = 
+    let buffer_defdomain t b = 
+      let period = Buffer.period b in 
+      List.init (Buffer.length b ) (fun i -> ( t +. period *. (float_of_int i), t))
+      in
+    let assoc_domain =  List.map (fun t -> buffer_defdomain t ((streamfunc s) t)) (dom s) |> List.concat in 
+    let defdomain = fst (List.split assoc_domain) in 
+    let streamf t' = 
+      (* Determine in which buffer of s it is *)
+      let t = List.assoc t' assoc_domain in
+      let buffer = (streamfunc s ) t in 
+      Buffer.make_singleton (Buffer.latency buffer) (Buffer.period buffer) (sample_at t buffer t')
+    in
+    (defdomain , streamf)
 
 end
