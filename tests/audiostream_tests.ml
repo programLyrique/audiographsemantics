@@ -11,8 +11,18 @@ let singleton_stream test_ctxt =
   assert_equal 1. (Buffer.period buf);
   assert_equal samplebuf (Buffer.samplebuffer buf)
 
-let sample_periodic_s  = Stream.make_sample_periodic 10 1. 12 0.5
+let nb_buffers = 10 and sample_period = 1. and buffer_size = 12
+let sample_periodic_s  = AudioStream.make_sample_periodic nb_buffers sample_period buffer_size 0.5 
 
+let stream_length test_ctxt = 
+  assert_equal 10 (AudioStream.length sample_periodic_s)
 
+let periodic_timestamp test_ctxt =
+  assert_equal 0. (AudioStream.first sample_periodic_s);
+  assert_equal ((float_of_int ((nb_buffers - 1) * buffer_size)) *. sample_period) (AudioStream.last sample_periodic_s);
+  assert_equal ((float_of_int buffer_size) *. sample_period) (AudioStream.next sample_periodic_s (AudioStream.first sample_periodic_s))
 
-let suite = "audiostream" >::: ["singleton_stream" >:: singleton_stream]
+let suite = "audiostream" >::: ["singleton_stream" >:: singleton_stream;
+                                "length" >:: stream_length;
+                                "first timestamp" >:: periodic_timestamp
+                                ]
