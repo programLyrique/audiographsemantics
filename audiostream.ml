@@ -48,6 +48,7 @@ module type AUDIOSTREAM = sig
   val make : defdomain -> (timestamp * Buffer.buffer) list -> stream
   val make_f : defdomain -> streamfunction -> stream
   val make_samplestream : defdomain -> float list -> stream
+  val make_bufferstream : defdomain -> Buffer.buffer list -> stream
   val make_singleton : timestamp -> Buffer.buffer -> stream
   val make_sample_periodic : int -> Buffer.period -> int -> float -> stream
   val emptystream : stream
@@ -61,9 +62,11 @@ module type AUDIOSTREAM = sig
   val next : stream -> timestamp -> timestamp
   val length : stream -> int
   val prec : stream -> timestamp -> defdomain
+  val succ : stream -> timestamp -> defdomain
   val concat : stream -> stream -> stream
   val at : stream -> int -> timestamp
   val substream : stream -> timestamp -> timestamp -> stream
+  val buffers : stream -> Buffer.buffer list
 
   val unbufferize : timestamp -> Buffer.buffer -> stream
   val phi : stream -> stream
@@ -90,6 +93,10 @@ module AudioStream : AUDIOSTREAM = struct
     let samplebuffers  = List.map (fun sample -> Buffer.make 0. 1. (Array.singleton sample)) samples in 
     (* Combine will raise if the two argument lists have different sizes *)
     make defdomain (List.combine defdomain samplebuffers )
+
+  let make_bufferstream defdomain buffers = 
+    assert (List.length defdomain = List.length buffers);
+    make defdomain (List.combine defdomain buffers)
 
   let make_singleton (timestamp : timestamp) (buffer : Buffer.buffer) =
     ([timestamp], function (t : timestamp)-> buffer)
@@ -164,6 +171,8 @@ module AudioStream : AUDIOSTREAM = struct
   let substream s t1 t2 =
     let new_defdomain = List.take_while (fun t' -> t' <= t2) (List.drop_while (fun t' -> t' >= t1) (dom s)) in 
     make_f new_defdomain (streamfunc s) 
+
+  let buffers s = List.map (fun t -> (streamfunc s) t) (dom s)
 
   (** Generates a stream from a timestampd and a buffer, where each sample in the buffer becomes an element in the stream *) 
   let unbufferize t b = 
